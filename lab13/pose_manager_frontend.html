@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/roslib/build/roslib.min.js"></script>
+  <style>
+    body { font-family: Arial; }
+    li { margin: 5px 0; }
+    button { margin-top: 5px; }
+  </style>
+</head>
+<body>
+  <h2>Stretch Pose Tool</h2>
+
+  <!-- Save Pose -->
+  <input id="poseName" placeholder="Pose name"/>
+  
+  <select id="frame">
+    <option value="base_link">Base</option>
+    <option value="aruco_marker_frame">ArUco</option>
+  </select>  <!-- not sure the aruco value is right -->
+
+  <button onclick="savePose()">Save Pose</button>
+
+  <h3>Run Pose</h3>
+  <input id="runName" placeholder="Pose name"/>
+  <button onclick="runPose()">Run</button>
+
+  <hr>
+
+  <!-- 🔁 Sequence Builder -->
+  <h3>Sequence Builder</h3>
+
+  <input id="seqInput" placeholder="Pose name"/>
+  <button onclick="addToSequence()">Add</button>
+
+  <ul id="sequenceList"></ul>
+
+  <button onclick="runSequence()">Run Sequence</button>
+  <button onclick="clearSequence()">Clear</button>
+
+  <script>
+    const ros = new ROSLIB.Ros({
+      url: "ws://slinky.hcrlab.cs.washington.edu:9090"
+    });
+
+    const saveTopic = new ROSLIB.Topic({
+      ros: ros,
+      name: "/save_pose",
+      messageType: "std_msgs/String"
+    });
+
+    const runTopic = new ROSLIB.Topic({
+      ros: ros,
+      name: "/run_pose",
+      messageType: "std_msgs/String"
+    });
+
+    const seqTopic = new ROSLIB.Topic({
+      ros: ros,
+      name: "/run_sequence",
+      messageType: "std_msgs/String"
+    });
+
+    // 🧠 Sequence state
+    let sequence = [];
+
+    function savePose() {
+      const name = document.getElementById("poseName").value.trim();
+      const frame = document.getElementById("frame").value;
+
+      if (!name) {
+        alert("Please enter a pose name");
+        return;
+      }
+
+      const msg = new ROSLIB.Message({
+        data: JSON.stringify({ name, frame })
+      });
+
+      saveTopic.publish(msg);
+    }
+
+    function runPose() {
+      const name = document.getElementById("runName").value;
+
+      const msg = new ROSLIB.Message({
+        data: name
+      });
+
+      runTopic.publish(msg);
+    }
+
+    // 🔁 Sequence functions
+
+    function addToSequence() {
+      const name = document.getElementById("seqInput").value.trim();
+      if (!name) return;
+
+      sequence.push(name);
+      document.getElementById("seqInput").value = "";
+      renderSequence();
+    }
+
+    function renderSequence() {
+      const list = document.getElementById("sequenceList");
+      list.innerHTML = "";
+
+      sequence.forEach((pose, index) => {
+        const li = document.createElement("li");
+        li.textContent = pose;
+
+        const btn = document.createElement("button");
+        btn.textContent = "x";
+        btn.style.marginLeft = "10px";
+
+        btn.onclick = () => {
+          sequence.splice(index, 1);
+          renderSequence();
+        };
+
+        li.appendChild(btn);
+        list.appendChild(li);
+      });
+    }
+
+    function runSequence() {
+      if (sequence.length === 0) return;
+
+      const msg = new ROSLIB.Message({
+        data: JSON.stringify(sequence)
+      });
+
+      seqTopic.publish(msg);
+    }
+
+    function clearSequence() {
+      sequence = [];
+      renderSequence();
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Stretch FINAL Web Teleop</title>
+  <script src="https://cdn.jsdelivr.net/npm/roslib/build/roslib.min.js"></script>
+</head>
+
+<body>
+
+<h2>Stretch Web Teleop (FINAL WORKING)</h2>
+
+<button onclick="forward()">Forward</button>
+<button onclick="back()">Back</button>
+<button onclick="left()">Left</button>
+<button onclick="right()">Right</button>
+<button onclick="stop()">STOP</button>
+
+<h3>Joint States</h3>
+<pre id="joint_states"></pre>
+
+<h3>Log</h3>
+<pre id="log"></pre>
+
+<script>
+
+const ros = new ROSLIB.Ros({
+  url: "ws://slinky.hcrlab.cs.washington.edu:9090"
+});
+
+ros.on('connection', () => {
+  log("connected");
+  jointStateSub.subscribe(onJointState);
+});
+
+ros.on('error', e => log("error"));
+ros.on('close', () => log("closed"));
+
+const cmdVel = new ROSLIB.Topic({
+  ros: ros,
+  name: "/stretch/cmd_vel",
+  messageType: "geometry_msgs/Twist"
+});
+
+// ✅ NEW: Joint state subscriber
+const jointStateSub = new ROSLIB.Topic({
+  ros: ros,
+  name: "/joint_states",
+  messageType: "sensor_msgs/JointState"
+});
+
+function onJointState(msg) {
+  // Format joint states nicely
+  let text = "";
+  for (let i = 0; i < msg.name.length; i++) {
+    const name = msg.name[i];
+    const pos = msg.position[i]?.toFixed(3);
+    text += `${name}: ${pos}\n`;
+  }
+
+  document.getElementById("joint_states").innerText = text;
+}
+
+function send(lx, az) {
+  cmdVel.publish({
+    linear: { x: lx, y: 0, z: 0 },
+    angular: { x: 0, y: 0, z: az }
+  });
+
+  log(`cmd_vel: ${lx}, ${az}`);
+}
+
+function forward() { send(0.2, 0); }
+function back()    { send(-0.2, 0); }
+function left()    { send(0, 0.8); }
+function right()   { send(0, -0.8); }
+function stop()    { send(0, 0); }
+
+function log(msg) {
+  document.getElementById("log").innerText += msg + "\n";
+}
+
+window.onbeforeunload = () => {
+  stop();
+  jointStateSub.unsubscribe();
+};
+
+</script>
+
+</body>
+</html>
