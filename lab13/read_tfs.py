@@ -1,9 +1,13 @@
+import json
+import math
 import rclpy
 from rclpy.node import Node
 from rclpy.time import Time
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
+
+POSE_FILE = "/tmp/poses.json"
 
 class FrameListener(Node):
 
@@ -21,13 +25,13 @@ class FrameListener(Node):
         self.timer = self.create_timer(time_period, self.on_timer)
 
     def on_timer(self):
-        from_frame_rel = 'base_link'
-        to_frame_rel = self.target_frame
+        from_frame_rel = self.target_frame
+        to_frame_rel = 'base_link'
 
         try:
             now = Time()
             trans = self.tf_buffer.lookup_transform(
-                to_frame_rel,
+                to_frame_rel, #base_link
                 from_frame_rel,
                 now)
         except TransformException as ex:
@@ -35,10 +39,26 @@ class FrameListener(Node):
                 f'Could not transform {to_frame_rel} to {from_frame_rel}: {ex}')
             return
 
+        x = math.trunc(trans.transform.translation.x * 100) / 100
+        y = math.trunc(trans.transform.translation.y * 100) / 100
+        z = math.trunc(trans.transform.translation.z * 100) / 100
+
         self.get_logger().info(
-                        f'the pose of target frame {from_frame_rel} with reference to {to_frame_rel} is: {trans}')
+            f'the pose of target frame {from_frame_rel} with reference to {to_frame_rel} is:\nx: {x}\ny: {y}\nz: {z}')
 
+        try:
+            with open(POSE_FILE, "r") as f:
+                poses = json.load(f)
+        except Exception:
+            poses = {}
 
+        poses["current"] = {"position": {"x": x, "y": y, "z": z}}
+
+        with open(POSE_FILE, "w") as f:
+            json.dump(poses, f, indent=2)
+
+# y bounds: -0.25 to -0.75 
+# z bounds: 0.0 to 1.0
 def main():
     rclpy.init()
     node = FrameListener()

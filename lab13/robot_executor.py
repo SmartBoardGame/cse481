@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 import time
 import rclpy
 from rclpy.node import Node
@@ -102,17 +103,17 @@ class PoseExecutor(hm.HelloNode):
             self.get_logger().warn(f"Pose not found: {name}")
             return False
         pose = self.poses[name]
-        x = pose["position"]["x"]
-        y = pose["position"]["y"]
-        z = pose["position"]["z"]
+        x = math.trunc(pose["position"]["x"] * 100) / 100
+        y = math.trunc(pose["position"]["y"] * 100) / 100
+        z = math.trunc(pose["position"]["z"] * 100) / 100
         self.execute_motion_from_xyz(x, y, z)
         return True
 
     def execute_motion_from_xyz(self, x, y, z):
         self.get_logger().info(f"Executing raw pose: {x}, {y}, {z}")
         base_translation = max(-0.3, min(x, 0.3))
-        lift_height      = max(0.2,  min(z, 1.1))
-        arm_extension    = max(0.0,  min(-y, 1.0))
+        lift_height      = max(0.2,  min(z, 1.0))
+        arm_extension    = max(0.0,  min((-y-0.25)/0.75, 1.0))
         self.get_logger().info(f"Executing raw pose2222: base {base_translation}, lift {lift_height}, arm {arm_extension}")
 
         try:
