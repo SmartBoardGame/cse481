@@ -4,6 +4,7 @@ import json
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from sensor_msgs.msg import JointState
 
 import tf2_ros
 from tf2_ros import TransformException
@@ -20,10 +21,18 @@ class PoseDatabase(Node):
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self.create_subscription(String, "/save_pose", self.save_pose_cb, 10)
+        self.create_subscription(JointState, "/stretch/joint_states", self.joint_states_cb, 10)
 
         self.poses = self.load_poses()
+        self.latest_joint_states = {}
+
 
         self.get_logger().info("PoseDatabase running")
+
+    def joint_states_cb(self, msg):
+        for name, pos in zip(msg.name, msg.position):
+            self.latest_joint_states[name] = pos
+
 
     def load_poses(self):
         try:
@@ -47,7 +56,7 @@ class PoseDatabase(Node):
         try:
             t = self.tf_buffer.lookup_transform(
                 frame,
-                "link_grasp_center",
+                "link_arm_l0",
                 rclpy.time.Time()
             )
 
@@ -63,6 +72,11 @@ class PoseDatabase(Node):
                     "y": t.transform.rotation.y,
                     "z": t.transform.rotation.z,
                     "w": t.transform.rotation.w
+                },
+                "gripper_rpy": {
+                    "joint_wrist_roll": self.latest_joint_states["joint_wrist_roll"],
+                    "joint_wrist_pitch": self.latest_joint_states["joint_wrist_pitch"],
+                    "joint_wrist_yaw": self.latest_joint_states["joint_wrist_yaw"]
                 }
             }
 

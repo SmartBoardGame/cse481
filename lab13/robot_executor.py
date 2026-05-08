@@ -106,14 +106,19 @@ class PoseExecutor(hm.HelloNode):
         x = math.trunc(pose["position"]["x"] * 100) / 100
         y = math.trunc(pose["position"]["y"] * 100) / 100
         z = math.trunc(pose["position"]["z"] * 100) / 100
+
         self.execute_motion_from_xyz(x, y, z)
+        try:
+            self.move_to_pose(pose["gripper_rpy"], blocking=True)
+        except Exception as e:
+            self.get_logger().error(f"Motion failed: {e}")
         return True
 
     def execute_motion_from_xyz(self, x, y, z):
         self.get_logger().info(f"Executing raw pose: {x}, {y}, {z}")
         base_translation = max(-0.3, min(x, 0.3))
-        lift_height      = max(0.2,  min(z, 1.0))
-        arm_extension    = max(0.0,  min((-y-0.25)/0.75, 1.0))
+        lift_height      = max(0.2,  min(z - 0.11, 1.0))
+        arm_extension    = max(0.0,  min(-y + 0.4, 1.0))
         self.get_logger().info(f"Executing raw pose2222: base {base_translation}, lift {lift_height}, arm {arm_extension}")
 
         try:
@@ -131,7 +136,6 @@ class PoseExecutor(hm.HelloNode):
             )
         except Exception as e:
             self.get_logger().error(f"Motion failed: {e}")
-
 
 def main():
     node = PoseExecutor()

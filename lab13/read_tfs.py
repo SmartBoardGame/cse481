@@ -3,6 +3,7 @@ import math
 import rclpy
 from rclpy.node import Node
 from rclpy.time import Time
+from sensor_msgs.msg import JointState
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
@@ -14,7 +15,7 @@ class FrameListener(Node):
     def __init__(self):
         super().__init__('stretch_tf_listener')
 
-        self.declare_parameter('target_frame', 'link_grasp_center')
+        self.declare_parameter('target_frame', 'link_arm_l0')
         self.target_frame = self.get_parameter(
             'target_frame').get_parameter_value().string_value
 
@@ -23,6 +24,14 @@ class FrameListener(Node):
 
         time_period = 1.0 # seconds
         self.timer = self.create_timer(time_period, self.on_timer)
+
+        self.latest_joint_states = {}
+
+        self.create_subscription(JointState, "/stretch/joint_states", self.joint_states_cb, 10)
+
+    def joint_states_cb(self, msg):
+        for name, pos in zip(msg.name, msg.position):
+            self.latest_joint_states[name] = pos
 
     def on_timer(self):
         from_frame_rel = self.target_frame
@@ -45,6 +54,15 @@ class FrameListener(Node):
 
         self.get_logger().info(
             f'the pose of target frame {from_frame_rel} with reference to {to_frame_rel} is:\nx: {x}\ny: {y}\nz: {z}')
+        self.get_logger().info(
+            f'arm extension: {sum([self.latest_joint_states[f"joint_arm_l{x}"] for x in range(0, 4)])}'
+        )
+        self.get_logger().info(
+            f'lift: {self.latest_joint_states["joint_lift"]}'
+        )
+        # self.get_logger().info(
+        #     f'the joint states: {self.latest_joint_states}'
+        # )
 
         try:
             with open(POSE_FILE, "r") as f:
