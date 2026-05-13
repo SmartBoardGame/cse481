@@ -15,7 +15,7 @@ class FrameListener(Node):
     def __init__(self):
         super().__init__('stretch_tf_listener')
 
-        self.declare_parameter('target_frame', 'link_arm_l0')
+        self.declare_parameter('target_frame', 'base_link')
         self.target_frame = self.get_parameter(
             'target_frame').get_parameter_value().string_value
 
@@ -35,7 +35,7 @@ class FrameListener(Node):
 
     def on_timer(self):
         from_frame_rel = self.target_frame
-        to_frame_rel = 'base_link'
+        to_frame_rel = 'box'
 
         try:
             now = Time()

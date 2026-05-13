@@ -32,7 +32,6 @@ class PoseDatabase(Node):
     def joint_states_cb(self, msg):
         for name, pos in zip(msg.name, msg.position):
             self.latest_joint_states[name] = pos
-        self.get_logger().info(f"Joint states: {self.latest_joint_states}")
 
 
     def load_poses(self):
