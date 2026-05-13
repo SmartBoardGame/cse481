@@ -32,6 +32,7 @@ class PoseDatabase(Node):
     def joint_states_cb(self, msg):
         for name, pos in zip(msg.name, msg.position):
             self.latest_joint_states[name] = pos
+        self.get_logger().info(f"Joint states: {self.latest_joint_states}")
 
 
     def load_poses(self):
@@ -51,12 +52,11 @@ class PoseDatabase(Node):
 
         name = data["name"]
         frame = data["frame"]
-        print("frame", frame)
 
         try:
             t = self.tf_buffer.lookup_transform(
                 frame,
-                "link_arm_l0",
+                "base_link",
                 rclpy.time.Time()
             )
 
@@ -77,7 +77,9 @@ class PoseDatabase(Node):
                     "joint_wrist_roll": self.latest_joint_states["joint_wrist_roll"],
                     "joint_wrist_pitch": self.latest_joint_states["joint_wrist_pitch"],
                     "joint_wrist_yaw": self.latest_joint_states["joint_wrist_yaw"]
-                }
+                },
+                "lift_height": self.latest_joint_states["joint_lift"],
+                "wrist_extension": self.latest_joint_states["joint_arm_l0"] + self.latest_joint_states["joint_arm_l1"] + self.latest_joint_states["joint_arm_l2"] + self.latest_joint_states["joint_arm_l3"]
             }
 
             self.save_file()
