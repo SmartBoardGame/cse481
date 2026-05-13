@@ -9,13 +9,31 @@ from sensor_msgs.msg import JointState
 import tf2_ros
 from tf2_ros import TransformException
 
+import sys
+import time
+from math import atan2, sqrt
+import numpy as np
+import rclpy
+from control_msgs.action import FollowJointTrajectory
+from geometry_msgs.msg import TransformStamped
+from rclpy.action import ActionClient
+from rclpy.duration import Duration
+from rclpy.node import Node
+from rclpy.time import Time
+from tf2_ros import TransformException, Buffer, TransformListener
+from tf_transformations import euler_from_quaternion, quaternion_matrix
+from trajectory_msgs.msg import JointTrajectoryPoint
+from action_msgs.msg import GoalStatus
+
+
 POSE_FILE = "/tmp/poses.json"
 
 
 class ArucoNavigator(Node):
 
-    def __init__(self):
+    def __init__(self, node):
         super().__init__('aruco_navigator')
+        self.node = node
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -133,17 +151,18 @@ class ArucoNavigator(Node):
             self.get_logger().warn(f"Pose not found: {name}")
             return False
         
-        self.align_to_marker(self.poses['position']['z'])
-        self.send_base_goal_blocking('joint_lift', self.poses['lift_height'])
-        self.send_base_goal_blocking('wrist_extension', self.poses['wrist_extension'])
-        self.send_base_goal_blocking('joint_wrist_yaw', self.poses['gripper_rpy']['joint_wrist_yaw'])
-        self.send_base_goal_blocking('joint_wrist_pitch', self.poses['gripper_rpy']['joint_wrist_pitch'])
-        self.send_base_goal_blocking('joint_wrist_roll', self.poses['gripper_rpy']['joint_wrist_roll'])
+        desired_pose = self.poses[name]
+        self.align_to_marker(desired_pose['position']['z'])
+        self.send_base_goal_blocking('joint_lift', desired_pose['lift_height'])
+        self.send_base_goal_blocking('wrist_extension', desired_pose['wrist_extension'])
+        self.send_base_goal_blocking('joint_wrist_yaw', desired_pose['gripper_rpy']['joint_wrist_yaw'])
+        self.send_base_goal_blocking('joint_wrist_pitch', desired_pose['gripper_rpy']['joint_wrist_pitch'])
+        self.send_base_goal_blocking('joint_wrist_roll', desired_pose['gripper_rpy']['joint_wrist_roll'])
 
     
     def compute_difference(self, offset):
         # Extract quaternion and rotation matrix of marker in base_link frame
-        trans_base = tf_buffer.lookup_transform(
+        trans_base = self.tf_buffer.lookup_transform(
                     "base_link", "box", Time()
                 )
         x, y, z, w = (
@@ -154,8 +173,8 @@ class ArucoNavigator(Node):
         )
         R = quaternion_matrix((x, y, z, w))
 
-        # Apply rotation to the offset vector
-        P_dash = np.array([[0], [-offset], [0], [1]])
+        # Apply rotation to the offset vector, positive Z DIRECTION IN OUR CASE
+        P_dash = np.array([[0], [0], [offset], [1]])
         P = np.array(
             [
                 [trans_base.transform.translation.x],
@@ -182,7 +201,7 @@ class ArucoNavigator(Node):
         # Calculate final rotation: -phi (cancel rotation needed to align),
         # + z_rot_base (original marker rotation),
         # + pi (such that the base and the marker axis are aligned as shown in tutorial)
-        z_rot_base = -phi + z_rot_base + np.pi
+        z_rot_base = -phi + z_rot_base + np.pi/2 # aligned with forward-cam facing aruco marker
 
         return phi, dist, z_rot_base
 
@@ -226,9 +245,10 @@ class ArucoNavigator(Node):
 
 def main():
     rclpy.init()
-    node = PoseDatabase()
-    rclpy.spin(node)
-    node.destroy_node()
+    node = Node("aruco_navigator")
+    aruco = ArucoNavigator(node=node)
+    rclpy.spin(aruco)
+    aruco.destroy_node()
     rclpy.shutdown()
 
 
