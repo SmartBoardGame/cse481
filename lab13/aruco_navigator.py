@@ -163,7 +163,7 @@ class ArucoNavigator(Node):
     def compute_difference(self, offset):
         # Extract quaternion and rotation matrix of marker in base_link frame
         trans_base = self.tf_buffer.lookup_transform(
-                    "base_link", "box", Time()
+                    "base_link", "trash_can", Time()
                 )
         x, y, z, w = (
             trans_base.transform.rotation.x,
@@ -201,7 +201,7 @@ class ArucoNavigator(Node):
         # Calculate final rotation: -phi (cancel rotation needed to align),
         # + z_rot_base (original marker rotation),
         # + pi (such that the base and the marker axis are aligned as shown in tutorial)
-        z_rot_base = -phi + z_rot_base + np.pi/2 # aligned with forward-cam facing aruco marker
+        z_rot_base = -phi + z_rot_base + np.pi
 
         return phi, dist, z_rot_base
 

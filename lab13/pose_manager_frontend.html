@@ -16,7 +16,7 @@
   
   <select id="frame">
     <option value="base_link">Base</option>
-    <option value="box">ArUco</option>
+    <option value="trash_can">ArUco</option>
   </select>  <!-- not sure the aruco value is right -->
 
   <button onclick="savePose()">Save Pose</button>
@@ -40,7 +40,8 @@
 
   <script>
     const ros = new ROSLIB.Ros({
-      url: "ws://slinky.hcrlab.cs.washington.edu:9090"
+      // url: "ws://slinky.hcrlab.cs.washington.edu:9090"
+      url: "ws://weird-stretch.cs.washington.edu:9090"
     });
 
     const saveTopic = new ROSLIB.Topic({

@@ -35,7 +35,7 @@ class FrameListener(Node):
 
     def on_timer(self):
         from_frame_rel = self.target_frame
-        to_frame_rel = 'box'
+        to_frame_rel = 'trash_can'
 
         try:
             now = Time()
