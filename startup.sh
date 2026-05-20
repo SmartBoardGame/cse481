@@ -2,9 +2,22 @@
 
 SESSION="dev"
 
+# for slinky
+# WEB_DIR="$HOME/hello-robot/bresenham/lab13"
+# TARGET_URL="http://slinky.hcrlab.cs.washington.edu:8000"
+
+# for weird-stretch
+WEB_DIR="$HOME/hello-robot/bresenham/cse481/lab13"
+TARGET_URL="http://weird-stretch.cs.washington.edu:8000"
+
+# Ensure a clean start
+tmux kill-session -t "$SESSION" 2>/dev/null
 tmux new-session -d -s "$SESSION" -n 'driver'
+# no renaming windows
+tmux set-option -t "$SESSION:driver" allow-rename off
 
 # Terminal 1: stretch_driver
+echo "Starting stretch_driver..."
 tmux send-keys -t "$SESSION:driver" "ros2 launch stretch_core stretch_driver.launch.py" C-m
 
 # Terminal 2: camera
@@ -25,13 +38,13 @@ tmux send-keys -t "$SESSION:rosbridge" "ros2 launch rosbridge_server rosbridge_w
 
 # Terminal 6: web server
 tmux new-window -t "$SESSION" -n 'webserver'
-tmux send-keys -t "$SESSION:webserver" "cd ~/bresenham/lab13 && python3 -m http.server 8000" C-m
+tmux send-keys -t "$SESSION:webserver" "cd ${WEB_DIR} && python3 -m http.server 8000" C-m
 
 # Opens browser
-xdg-open "http://slinky.hcrlab.cs.washington.edu:8000"
+xdg-open "$TARGET_URL"
 
 # Terminal 7: navigator
 tmux new-window -t "$SESSION" -n 'navigator'
-tmux send-keys -t "$SESSION:navigator" "cd ~/bresenham/lab13 && python3 aruco_navigator.py" C-m
+tmux send-keys -t "$SESSION:navigator" "cd ${WEB_DIR} && python3 aruco_navigator.py" C-m
 
 tmux attach-session -t "$SESSION"
