@@ -152,14 +152,17 @@ class ArucoNavigator(Node):
             return False
         
         desired_pose = self.poses[name]
-        self.align_to_marker(desired_pose['position']['z'])
-        self.send_base_goal_blocking('joint_lift', desired_pose['lift_height'])
-        self.send_base_goal_blocking('wrist_extension', desired_pose['wrist_extension'])
-        self.send_base_goal_blocking('joint_wrist_yaw', desired_pose['gripper_rpy']['joint_wrist_yaw'])
-        self.send_base_goal_blocking('joint_wrist_pitch', desired_pose['gripper_rpy']['joint_wrist_pitch'])
-        self.send_base_goal_blocking('joint_wrist_roll', desired_pose['gripper_rpy']['joint_wrist_roll'])
 
-    
+        joints_list = [
+            ("joint_lift", desired_pose['lift_height']),
+            ("wrist_extension", desired_pose['wrist_extension']),
+            ("joint_wrist_yaw", desired_pose['gripper_rpy']['joint_wrist_yaw']),
+            ("joint_wrist_pitch", desired_pose['gripper_rpy']['joint_wrist_pitch']),
+            ("joint_wrist_roll", desired_pose['gripper_rpy']['joint_wrist_roll'])
+        ]
+
+        self.send_base_goal_blocking(joints_list)
+
     def compute_difference(self, offset):
         # Extract quaternion and rotation matrix of marker in base_link frame
         trans_base = self.tf_buffer.lookup_transform(
@@ -206,22 +209,24 @@ class ArucoNavigator(Node):
         return phi, dist, z_rot_base
 
 
-    def send_base_goal_blocking(self, joint_name, inc):
+    def send_base_goal_blocking(self, joints_list):
         point = JointTrajectoryPoint()
-        point.positions = [inc]
+        point.positions = [inc for _, inc in joints_list]
         point.time_from_start = Duration(seconds=5.0).to_msg()
 
         goal = FollowJointTrajectory.Goal()
-        goal.trajectory.joint_names = [joint_name]
+        goal.trajectory.joint_names = [joint_name for joint_name, _ in joints_list]
         goal.trajectory.points = [point]
 
-        self.node.get_logger().info(f"[{joint_name}] Sending goal: {inc:.3f}")
+        joint_names_str = ", ".join(goal.trajectory.joint_names)
+        self.node.get_logger().info(f"Sending goal for joints: [{joint_names_str}]")
+
         send_goal_future = self.trajectory_client.send_goal_async(goal)
         rclpy.spin_until_future_complete(self.node, send_goal_future)
         goal_handle = send_goal_future.result()
 
         if not goal_handle.accepted:
-            self.node.get_logger().error(f"Goal for {joint_name} was rejected!")
+            self.node.get_logger().error(f"Goal for joints [{joint_names_str}] was rejected!")
             return
 
         result_future = goal_handle.get_result_async()
@@ -230,17 +235,22 @@ class ArucoNavigator(Node):
 
         if result.status != GoalStatus.STATUS_SUCCEEDED:
             self.node.get_logger().warn(
-                f"Goal for {joint_name} did not succeed: status {result.status}"
+                f"Goal for joints [{joint_names_str}] did not succeed: status {result.status}"
             )
         else:
-            self.node.get_logger().info(f"Goal for {joint_name} succeeded.")
+            self.node.get_logger().info(f"Goal for joints [{joint_names_str}] succeeded.")
                 
     def align_to_marker(self, offset):
         phi, dist, final_theta = self.compute_difference(offset)
 
-        self.send_base_goal_blocking("rotate_mobile_base", phi)
-        self.send_base_goal_blocking("translate_mobile_base", dist)
-        self.send_base_goal_blocking("rotate_mobile_base", final_theta)
+        # Concurrent turn and drive
+        self.send_base_goal_blocking([
+            ("rotate_mobile_base", phi),
+            ("translate_mobile_base", dist)
+        ])
+
+        # Final alignment turn
+        self.send_base_goal_blocking([("rotate_mobile_base", final_theta)])
 
 
 def main():
