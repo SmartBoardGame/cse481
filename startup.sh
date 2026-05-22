@@ -56,6 +56,6 @@ tmux send-keys -t "$SESSION:navigator" "cd ${WEB_DIR} && python3 aruco_navigator
 
 # Terminal 8: keyboard_teleop
 tmux new-window -t "$SESSION" -n 'keyboard_teleop'
-tmux send-keys -t "$SESSION:keyboard_teleop" "ros2 run stretch_core keyboard_teleop"
+tmux send-keys -t "$SESSION:keyboard_teleop" "ros2 run stretch_core keyboard_teleop" C-m
 
 tmux attach-session -t "$SESSION"
