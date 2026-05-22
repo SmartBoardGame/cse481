@@ -152,6 +152,7 @@ class ArucoNavigator(Node):
             return False
         
         desired_pose = self.poses[name]
+        self.align_to_marker(desired_pose['position']['z'])
 
         joints_list = [
             ("joint_lift", desired_pose['lift_height']),
@@ -243,13 +244,8 @@ class ArucoNavigator(Node):
     def align_to_marker(self, offset):
         phi, dist, final_theta = self.compute_difference(offset)
 
-        # Concurrent turn and drive
-        self.send_base_goal_blocking([
-            ("rotate_mobile_base", phi),
-            ("translate_mobile_base", dist)
-        ])
-
-        # Final alignment turn
+        self.send_base_goal_blocking([("rotate_mobile_base", phi)])
+        self.send_base_goal_blocking([("translate_mobile_base", dist)])
         self.send_base_goal_blocking([("rotate_mobile_base", final_theta)])
 
 
