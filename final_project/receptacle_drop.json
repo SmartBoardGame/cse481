@@ -1,0 +1,17 @@
+{
+  "receptacle_drop": {
+    "tf": null,
+    "joints": {
+      "joint_lift": 1.0677495211483488,
+      "joint_arm_l0": 0.07998252101556011,
+      "joint_arm_l1": 0.07998252101556011,
+      "joint_arm_l2": 0.07998252101556011,
+      "joint_arm_l3": 0.07998252101556011,
+      "joint_wrist_yaw": 1.5953400194010667,
+      "joint_wrist_pitch": 0.056757289151768725,
+      "joint_wrist_roll": 0.0,
+      "joint_gripper_finger_left": 0.06362513567124516,
+      "joint_arm_total": 0.31993008406224044
+    }
+  }
+}

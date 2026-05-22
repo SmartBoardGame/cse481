@@ -152,7 +152,7 @@ class ArucoNavigator(Node):
             return False
         
         desired_pose = self.poses[name]
-        self.align_to_marker(desired_pose['position']['z'])
+        self.align_to_marker(offset_x = desired_pose['position']['x'], offset_z = desired_pose['position']['z'])
 
         joints_list = [
             ("joint_lift", desired_pose['lift_height']),
@@ -164,10 +164,12 @@ class ArucoNavigator(Node):
 
         self.send_base_goal_blocking(joints_list)
 
-    def compute_difference(self, offset):
+    def compute_difference(self, offset_x = 0, offset_y = 0, offset_z = 0):
+        self.node.get_logger().info(f"aligning to offsets offset_x {offset_x}, offset_y {offset_y}, offset_z {offset_z}")
+
         # Extract quaternion and rotation matrix of marker in base_link frame
         trans_base = self.tf_buffer.lookup_transform(
-                    "base_link", "trash_can", Time()
+                    "base_link", "receptacle", Time()
                 )
         x, y, z, w = (
             trans_base.transform.rotation.x,
@@ -178,7 +180,7 @@ class ArucoNavigator(Node):
         R = quaternion_matrix((x, y, z, w))
 
         # Apply rotation to the offset vector, positive Z DIRECTION IN OUR CASE
-        P_dash = np.array([[0], [0], [offset], [1]])
+        P_dash = np.array([[0], [0], [offset_z], [1]])
         P = np.array(
             [
                 [trans_base.transform.translation.x],
@@ -205,7 +207,9 @@ class ArucoNavigator(Node):
         # Calculate final rotation: -phi (cancel rotation needed to align),
         # + z_rot_base (original marker rotation),
         # + pi (such that the base and the marker axis are aligned as shown in tutorial)
-        z_rot_base = -phi + z_rot_base + np.pi
+        
+        # np.pi for trash can start, np.pi/2 for receptacle
+        z_rot_base = -phi + z_rot_base + np.pi/2
 
         return phi, dist, z_rot_base
 
@@ -241,8 +245,9 @@ class ArucoNavigator(Node):
         else:
             self.node.get_logger().info(f"Goal for joints [{joint_names_str}] succeeded.")
                 
-    def align_to_marker(self, offset):
-        phi, dist, final_theta = self.compute_difference(offset)
+    def align_to_marker(self, offset_x = 0, offset_y = 0, offset_z = 0):
+        self.node.get_logger().info(f"aligning to offsets offset_x {offset_x}, offset_y {offset_y}, offset_z {offset_z}")
+        phi, dist, final_theta = self.compute_difference(offset_x, offset_y, offset_z)
 
         self.send_base_goal_blocking([("rotate_mobile_base", phi)])
         self.send_base_goal_blocking([("translate_mobile_base", dist)])
