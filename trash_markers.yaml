@@ -1,0 +1,11 @@
+# Bresenham Trash Aruco Markers
+'10':
+  length_mm: 80
+  use_rgb_only: False
+  name: 'trash_can'
+  link: 'trash_can'
+'11':
+  length_mm: 80
+  use_rgb_only: False
+  name: 'receptacle'
+  link: 'receptacle'

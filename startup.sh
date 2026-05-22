@@ -1,18 +1,25 @@
 #!/bin/bash
 
+# Check argument
+if [ "$1" == "slinky" ]; then
+    WEB_DIR="$HOME/bresenham/lab13"
+    TARGET_URL="http://slinky.hcrlab.cs.washington.edu:8000"
+elif [ "$1" == "weird-stretch" ]; then
+    WEB_DIR="$HOME/bresenham/cse481/lab13"
+    TARGET_URL="http://weird-stretch.cs.washington.edu:8000"
+else
+    echo "Usage: $0 [slinky|weird-stretch]"
+    exit 1
+fi
+
+echo "If necessary, uncomment correct url in lab13/pose_manager_frontend.html"
+
 SESSION="dev"
-
-# for slinky
-# WEB_DIR="$HOME/hello-robot/bresenham/lab13"
-# TARGET_URL="http://slinky.hcrlab.cs.washington.edu:8000"
-
-# for weird-stretch
-WEB_DIR="$HOME/hello-robot/bresenham/cse481/lab13"
-TARGET_URL="http://weird-stretch.cs.washington.edu:8000"
 
 # Ensure a clean start
 tmux kill-session -t "$SESSION" 2>/dev/null
 tmux new-session -d -s "$SESSION" -n 'driver'
+
 # no renaming windows
 tmux set-option -t "$SESSION:driver" allow-rename off
 
@@ -46,5 +53,9 @@ xdg-open "$TARGET_URL"
 # Terminal 7: navigator
 tmux new-window -t "$SESSION" -n 'navigator'
 tmux send-keys -t "$SESSION:navigator" "cd ${WEB_DIR} && python3 aruco_navigator.py" C-m
+
+# Terminal 8: keyboard_teleop
+tmux new-window -t "$SESSION" -n 'keyboard_teleop'
+tmux send-keys -t "$SESSION:keyboard_teleop" "ros2 run stretch_core keyboard_teleop"
 
 tmux attach-session -t "$SESSION"
