@@ -122,7 +122,7 @@ class WasteDisposal(Node):
             R = quaternion_matrix((x, y, z, w))
 
             # Apply rotation to the offset vector, positive Z DIRECTION IN OUR CASE
-            P_dash = np.array([[0], [0], [offset_z], [1]])
+            P_dash = np.array([[offset_x], [offset_y], [offset_z], [1]])
             P = np.array(
                 [
                     [trans_base.transform.translation.x],
