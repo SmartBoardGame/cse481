@@ -44,7 +44,7 @@ class WasteDisposal(Node):
         )
 
         if not self.trajectory_client.wait_for_server(timeout_sec=10.0):
-            seld.node.get_logger().error("Unable to connect to trajectory server.")
+            self.node.get_logger().error("Unable to connect to trajectory server.")
             
         # Subscriber
         self.subscription = self.create_subscription(
@@ -160,7 +160,7 @@ class WasteDisposal(Node):
             return None, None, None
 
     def align_to_marker(self, target_frame, offset_x=0, offset_y=0, offset_z=0, offset_orientation=0):
-        self.get_logger().info(f"Aligning to {target_frame} with offset z={offset_z}")
+        self.node.get_logger().info(f"Aligning to {target_frame} with offset z={offset_z}")
         phi, dist, final_theta = self.compute_difference(target_frame, offset_x, offset_y, offset_z, offset_orientation)
         
         if phi is None:
@@ -172,14 +172,43 @@ class WasteDisposal(Node):
         return True
 
     def execute_named_pose_from_dict(self, pose_data):
-        # pose_data could be the dict from the JSON
-        joints_list = [
-            ("joint_lift", pose_data.get('lift_height', 0.5)),
-            ("wrist_extension", pose_data.get('wrist_extension', 0.1)),
-            ("joint_wrist_yaw", pose_data.get('gripper_rpy', {}).get('joint_wrist_yaw', 0.0)),
-            ("joint_wrist_pitch", pose_data.get('gripper_rpy', {}).get('joint_wrist_pitch', 0.0)),
-            ("joint_wrist_roll", pose_data.get('gripper_rpy', {}).get('joint_wrist_roll', 0.0))
-        ]
+        if "joints" in pose_data:
+            joints = pose_data["joints"]
+
+            def get_joint(key, default):
+                if key not in joints:
+                    self.node.get_logger().warn(f"Joint '{key}' not found in joints dict, using default: {default}")
+                return joints.get(key, default)
+
+            joints_list = [
+                ("joint_lift",        get_joint("joint_lift", 0.5)),
+                ("wrist_extension",   get_joint("joint_arm_total", 0.1)),
+                ("joint_wrist_yaw",   get_joint("joint_wrist_yaw", 0.0)),
+                ("joint_wrist_pitch", get_joint("joint_wrist_pitch", 0.0)),
+                ("joint_wrist_roll",  get_joint("joint_wrist_roll", 0.0)),
+            ]
+        else:
+            gripper_rpy = pose_data.get("gripper_rpy", {})
+
+            def get_flat(key, default):
+                if key not in pose_data:
+                    self.node.get_logger().warn(f"Key '{key}' not found in pose_data, using default: {default}")
+                return pose_data.get(key, default)
+
+            def get_rpy(key, default):
+                if key not in gripper_rpy:
+                    self.node.get_logger().warn(f"Key '{key}' not found in gripper_rpy, using default: {default}")
+                return gripper_rpy.get(key, default)
+
+            joints_list = [
+                ("joint_lift",        get_flat("lift_height", 0.5)),
+                ("wrist_extension",   get_flat("wrist_extension", 0.1)),
+                ("joint_wrist_yaw",   get_rpy("joint_wrist_yaw", 0.0)),
+                ("joint_wrist_pitch", get_rpy("joint_wrist_pitch", 0.0)),
+                ("joint_wrist_roll",  get_rpy("joint_wrist_roll", 0.0)),
+            ]
+
+        self.node.get_logger().info(f"Joints list: {joints_list}")
         return self.send_base_goal_blocking(joints_list)
 
     def execute_extraction(self):
@@ -208,23 +237,30 @@ class WasteDisposal(Node):
     def execute_disposal(self):
         # Approach
         self.node.get_logger().info("Executing navigation (approaching receptacle)...")
-
         start_poses = self.load_poses(RECEPTACLE_START_POSE_FILE)
+
         if "receptacle_start" in start_poses:
             pose = start_poses["receptacle_start"]
             target_frame = pose.get("frame", "receptacle")
             offset_z = pose.get("position", {}).get("z", 0.0)
             if self.align_to_marker(target_frame, offset_z=offset_z, offset_orientation=RECEPTACLE_OFFSET_ORIENTATION):
                 self.execute_named_pose_from_dict(pose)
-        
-        # Drop
+
+        # Drop — prefer the pose embedded in receptacle_start.json,
+        # fall back to the standalone receptacle_drop.json if absent
         self.node.get_logger().info("Executing disposal (dropping into receptacle)...")
+        drop_pose = start_poses.get("receptacle_drop")
 
-        drop_poses = self.load_poses(RECEPTACLE_DROP_POSE_FILE)
-        if "receptacle_drop" in drop_poses:
+        if drop_pose is None:
+            drop_poses = self.load_poses(RECEPTACLE_DROP_POSE_FILE)
+            drop_pose = drop_poses.get("receptacle_drop")
+
+        if drop_pose is not None:
             self.node.get_logger().info("Dropping trash...")
-            self.execute_named_pose_from_dict(drop_poses["receptacle_drop"])
-
+            self.execute_named_pose_from_dict(drop_pose)
+        else:
+            self.node.get_logger().error("No receptacle_drop pose found in either file.")
+        
 def main(args=None):
     rclpy.init(args=args)
     node = Node("waste_disposal")
