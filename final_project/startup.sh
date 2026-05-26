@@ -2,17 +2,17 @@
 
 # Check argument
 if [ "$1" == "slinky" ]; then
-    WEB_DIR="$HOME/bresenham/lab13"
+    WEB_DIR="$HOME/kevin/cse481/final_project"
     TARGET_URL="http://slinky.hcrlab.cs.washington.edu:8000"
 elif [ "$1" == "weird-stretch" ]; then
-    WEB_DIR="$HOME/bresenham/cse481/lab13"
+    WEB_DIR="$HOME/bresenham/cse481/final_project"
     TARGET_URL="http://weird-stretch.cs.washington.edu:8000"
 else
     echo "Usage: $0 [slinky|weird-stretch]"
     exit 1
 fi
 
-echo "If necessary, uncomment correct url in lab13/pose_manager_frontend.html"
+# echo "If necessary, uncomment correct url in lab13/pose_manager_frontend.html"
 
 SESSION="dev"
 
@@ -50,9 +50,9 @@ tmux send-keys -t "$SESSION:webserver" "cd ${WEB_DIR} && python3 -m http.server 
 # Opens browser
 xdg-open "$TARGET_URL"
 
-# Terminal 7: navigator
-tmux new-window -t "$SESSION" -n 'navigator'
-tmux send-keys -t "$SESSION:navigator" "cd ${WEB_DIR} && python3 aruco_navigator.py" C-m
+# Terminal 7: action_server
+tmux new-window -t "$SESSION" -n 'action_server'
+tmux send-keys -t "$SESSION:action_server" "cd ${WEB_DIR} && python3 ros_action_server.py" C-m
 
 # Terminal 8: keyboard_teleop
 tmux new-window -t "$SESSION" -n 'keyboard_teleop'

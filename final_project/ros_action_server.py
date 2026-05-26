@@ -20,30 +20,31 @@ from rclpy.time import Time
 from trajectory_msgs.msg import JointTrajectoryPoint
 from action_msgs.msg import GoalStatus
 
-CAN_START_POSE_FILE = "trash_start.json" # this is how stretch approaches the can
-CAN_PICKUP_POSE_FILE = "trash_pickup.json" # this is the extraction poses
-RECEPTACLE_START_POSE_FILE = "receptacle_start.json" # this is the approach pose for the receptacle
-RECEPTACLE_DROP_POSE_FILE = "receptacle_drop.json" # this is the pose for dropping the bag into it
+CAN_START_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/aruco_data/trash_start.json" # this is how stretch approaches the can
+CAN_PICKUP_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/joint_state_data/trash_pickup.json" # this is the extraction poses
+RECEPTACLE_START_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/aruco_data/receptacle_start.json" # this is the approach pose for the receptacle
+RECEPTACLE_DROP_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/joint_state_data/receptacle_drop.json" # this is the pose for dropping the bag into it
 
 TRASH_CAN_OFFSET_ORIENTATION = np.pi
 RECEPTACLE_OFFSET_ORIENTATION = np.pi/2
 
 class WasteDisposal(Node):
-    def __init__(self):
+    def __init__(self, node):
         super().__init__('waste_disposal')
+        self.node = node
 
         # TF and Action Client setup
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
         self.trajectory_client = ActionClient(
-            self,
+            self.node,
             FollowJointTrajectory,
             "/stretch_controller/follow_joint_trajectory",
         )
 
         if not self.trajectory_client.wait_for_server(timeout_sec=10.0):
-            self.get_logger().error("Unable to connect to trajectory server.")
+            seld.node.get_logger().error("Unable to connect to trajectory server.")
             
         # Subscriber
         self.subscription = self.create_subscription(
@@ -52,16 +53,16 @@ class WasteDisposal(Node):
             self.task_callback,
             10
         )
-        self.get_logger().info("Waste Disposal node started and listening to /task_execution.")
+        self.node.get_logger().info("Waste Disposal node started and listening to /task_execution.")
 
     def task_callback(self, msg):
         task_type = msg.data.strip().lower()
-        self.get_logger().info(f"Received task: {task_type}")
+        self.node.get_logger().info(f"Received task: {task_type}")
         
         handler = getattr(self, f"execute_{task_type}", None)
         
         if not handler:
-            self.get_logger().error(f"Unknown task type: {task_type}")
+            self.node.get_logger().error(f"Unknown task type: {task_type}")
             return
         
         handler()
@@ -71,7 +72,7 @@ class WasteDisposal(Node):
             with open(file_path, "r") as f:
                 return json.load(f)
         except Exception as e:
-            self.get_logger().error(f"Could not load poses from {file_path}: {e}")
+            self.node.get_logger().error(f"Could not load poses from {file_path}: {e}")
             return {}
 
     def send_base_goal_blocking(self, joints_list):
@@ -84,25 +85,25 @@ class WasteDisposal(Node):
         goal.trajectory.points = [point]
 
         joint_names_str = ", ".join(goal.trajectory.joint_names)
-        self.get_logger().info(f"Sending goal for joints: [{joint_names_str}]")
+        self.node.get_logger().info(f"Sending goal for joints: [{joint_names_str}]")
 
         send_goal_future = self.trajectory_client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self, send_goal_future)
+        rclpy.spin_until_future_complete(self.node, send_goal_future)
         goal_handle = send_goal_future.result()
 
         if not goal_handle.accepted:
-            self.get_logger().error(f"Goal for joints [{joint_names_str}] was rejected!")
+            self.node.get_logger().error(f"Goal for joints [{joint_names_str}] was rejected!")
             return False
 
         result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future)
+        rclpy.spin_until_future_complete(self.node, result_future)
         result = result_future.result()
 
         if result.status != GoalStatus.STATUS_SUCCEEDED:
-            self.get_logger().warn(f"Goal for joints [{joint_names_str}] did not succeed: status {result.status}")
+            self.node.get_logger().warn(f"Goal for joints [{joint_names_str}] did not succeed: status {result.status}")
             return False
         
-        self.get_logger().info(f"Goal for joints [{joint_names_str}] succeeded.")
+        self.node.get_logger().info(f"Goal for joints [{joint_names_str}] succeeded.")
         return True
 
     def compute_difference(self, target_frame, offset_x=0, offset_y=0, offset_z=0, offset_orientation=0):
@@ -155,7 +156,7 @@ class WasteDisposal(Node):
 
             return phi, dist, z_rot_base
         except TransformException as e:
-            self.get_logger().error(f"Transform error: {e}")
+            self.node.get_logger().error(f"Transform error: {e}")
             return None, None, None
 
     def align_to_marker(self, target_frame, offset_x=0, offset_y=0, offset_z=0, offset_orientation=0):
@@ -183,7 +184,7 @@ class WasteDisposal(Node):
 
     def execute_extraction(self):
         # Approach
-        self.get_logger().info("Executing navigation (approaching trash can)...")
+        self.node.get_logger().info("Executing navigation (approaching trash can)...")
         
         start_poses = self.load_poses(CAN_START_POSE_FILE)
         if "trash_start" in start_poses:
@@ -194,19 +195,19 @@ class WasteDisposal(Node):
                 self.execute_named_pose_from_dict(pose)
         
         # Extraction
-        self.get_logger().info("Executing extraction (picking up trash)...")
+        self.node.get_logger().info("Executing extraction (picking up trash)...")
 
         pickup_poses = self.load_poses(CAN_PICKUP_POSE_FILE)
         # Sequence: before_pickup -> (grip) -> pickup_high -> pickup_retracted
         for pose_name in ["before_pickup", "pickup_high", "pickup_retracted"]:
             if pose_name in pickup_poses:
-                self.get_logger().info(f"Executing pose: {pose_name}")
+                self.node.get_logger().info(f"Executing pose: {pose_name}")
                 self.execute_named_pose_from_dict(pickup_poses[pose_name])
-                time.sleep(1.0)
+                time.sleep(5.0)
 
     def execute_disposal(self):
         # Approach
-        self.get_logger().info("Executing navigation (approaching receptacle)...")
+        self.node.get_logger().info("Executing navigation (approaching receptacle)...")
 
         start_poses = self.load_poses(RECEPTACLE_START_POSE_FILE)
         if "receptacle_start" in start_poses:
@@ -217,21 +218,22 @@ class WasteDisposal(Node):
                 self.execute_named_pose_from_dict(pose)
         
         # Drop
-        self.get_logger().info("Executing disposal (dropping into receptacle)...")
+        self.node.get_logger().info("Executing disposal (dropping into receptacle)...")
 
         drop_poses = self.load_poses(RECEPTACLE_DROP_POSE_FILE)
         if "receptacle_drop" in drop_poses:
-            self.get_logger().info("Dropping trash...")
+            self.node.get_logger().info("Dropping trash...")
             self.execute_named_pose_from_dict(drop_poses["receptacle_drop"])
 
 def main(args=None):
     rclpy.init(args=args)
-    node = WasteDisposal()
+    node = Node("waste_disposal")
+    waste_disposal = WasteDisposal(node=node)
     try:
-        rclpy.spin(node)
+        rclpy.spin(waste_disposal)
     except KeyboardInterrupt:
         pass
-    node.destroy_node()
+    waste_disposal.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':
