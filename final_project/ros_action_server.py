@@ -28,22 +28,21 @@ TRASH_CAN_OFFSET_ORIENTATION = np.pi
 RECEPTACLE_OFFSET_ORIENTATION = np.pi/2
 
 class WasteDisposal(Node):
-    def __init__(self, node):
+    def __init__(self):
         super().__init__('waste_disposal')
-        self.node = node
 
         # TF and Action Client setup
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
         self.trajectory_client = ActionClient(
-            self.node,
+            self,
             FollowJointTrajectory,
             "/stretch_controller/follow_joint_trajectory",
         )
 
         if not self.trajectory_client.wait_for_server(timeout_sec=10.0):
-            self.node.get_logger().error("Unable to connect to trajectory server.")
+            self.get_logger().error("Unable to connect to trajectory server.")
             
         # Subscriber
         self.subscription = self.create_subscription(
@@ -52,16 +51,16 @@ class WasteDisposal(Node):
             self.task_callback,
             10
         )
-        self.node.get_logger().info("Waste Disposal node started and listening to /task_execution.")
+        self.get_logger().info("Waste Disposal node started and listening to /task_execution.")
 
     def task_callback(self, msg):
         task_type = msg.data.strip().lower()
-        self.node.get_logger().info(f"Received task: {task_type}")
+        self.get_logger().info(f"Received task: {task_type}")
         
         handler = getattr(self, f"execute_{task_type}", None)
         
         if not handler:
-            self.node.get_logger().error(f"Unknown task type: {task_type}")
+            self.get_logger().error(f"Unknown task type: {task_type}")
             return
         
         handler()
@@ -71,7 +70,7 @@ class WasteDisposal(Node):
             with open(file_path, "r") as f:
                 return json.load(f)
         except Exception as e:
-            self.node.get_logger().error(f"Could not load poses from {file_path}: {e}")
+            self.get_logger().error(f"Could not load poses from {file_path}: {e}")
             return {}
 
     def send_base_goal_blocking(self, joints_list):
@@ -84,30 +83,30 @@ class WasteDisposal(Node):
         goal.trajectory.points = [point]
 
         joint_names_str = ", ".join(goal.trajectory.joint_names)
-        self.node.get_logger().info(f"Sending goal for joints: [{joint_names_str}]")
+        self.get_logger().info(f"Sending goal for joints: [{joint_names_str}]")
 
         send_goal_future = self.trajectory_client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self.node, send_goal_future)
+        rclpy.spin_until_future_complete(self, send_goal_future)
         goal_handle = send_goal_future.result()
 
         if not goal_handle.accepted:
-            self.node.get_logger().error(f"Goal for joints [{joint_names_str}] was rejected!")
+            self.get_logger().error(f"Goal for joints [{joint_names_str}] was rejected!")
             return False
 
         result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self.node, result_future)
+        rclpy.spin_until_future_complete(self, result_future)
         result = result_future.result()
 
         if result.status != GoalStatus.STATUS_SUCCEEDED:
-            self.node.get_logger().warn(f"Goal for joints [{joint_names_str}] did not succeed: status {result.status}")
+            self.get_logger().warn(f"Goal for joints [{joint_names_str}] did not succeed: status {result.status}")
             return False
         
-        self.node.get_logger().info(f"Goal for joints [{joint_names_str}] succeeded.")
+        self.get_logger().info(f"Goal for joints [{joint_names_str}] succeeded.")
         return True
 
     def compute_difference(self, target_frame, offset_x=0, offset_y=0, offset_z=0, offset_orientation=0):
         try:
-            self.node.get_logger().info(f"aligning to offsets offset_x {offset_x}, offset_y {offset_y}, offset_z {offset_z}")
+            self.get_logger().info(f"aligning to offsets offset_x {offset_x}, offset_y {offset_y}, offset_z {offset_z}")
 
             # Extract quaternion and rotation matrix of marker in base_link frame
             trans_base = self.tf_buffer.lookup_transform(
@@ -155,11 +154,11 @@ class WasteDisposal(Node):
 
             return phi, dist, z_rot_base
         except TransformException as e:
-            self.node.get_logger().error(f"Transform error: {e}")
+            self.get_logger().error(f"Transform error: {e}")
             return None, None, None
 
     def align_to_marker(self, target_frame, offset_x=0, offset_y=0, offset_z=0, offset_orientation=0):
-        self.node.get_logger().info(f"Aligning to {target_frame} with offset z={offset_z}")
+        self.get_logger().info(f"Aligning to {target_frame} with offset z={offset_z}")
         phi, dist, final_theta = self.compute_difference(target_frame, offset_x, offset_y, offset_z, offset_orientation)
         
         if phi is None:
@@ -176,12 +175,12 @@ class WasteDisposal(Node):
 
             def get_joint(key, default):
                 if key not in joints:
-                    self.node.get_logger().warn(f"Joint '{key}' not found in joints dict, using default: {default}")
+                    self.get_logger().warn(f"Joint '{key}' not found in joints dict, using default: {default}")
                 return joints.get(key, default)
 
             joints_list = [
-                ("joint_lift",        get_joint("joint_lift", 0.5)),
-                ("wrist_extension",   get_joint("joint_arm_total", 0.1)),
+                ("joint_lift",        get_joint("joint_lift", 0.0)),
+                ("wrist_extension",   get_joint("joint_arm_total", 0.0)),
                 ("joint_wrist_yaw",   get_joint("joint_wrist_yaw", 0.0)),
                 ("joint_wrist_pitch", get_joint("joint_wrist_pitch", 0.0)),
                 ("joint_wrist_roll",  get_joint("joint_wrist_roll", 0.0)),
@@ -191,55 +190,56 @@ class WasteDisposal(Node):
 
             def get_flat(key, default):
                 if key not in pose_data:
-                    self.node.get_logger().warn(f"Key '{key}' not found in pose_data, using default: {default}")
+                    self.get_logger().warn(f"Key '{key}' not found in pose_data, using default: {default}")
                 return pose_data.get(key, default)
 
             def get_rpy(key, default):
                 if key not in gripper_rpy:
-                    self.node.get_logger().warn(f"Key '{key}' not found in gripper_rpy, using default: {default}")
+                    self.get_logger().warn(f"Key '{key}' not found in gripper_rpy, using default: {default}")
                 return gripper_rpy.get(key, default)
 
             joints_list = [
-                ("joint_lift",        get_flat("lift_height", 0.5)),
-                ("wrist_extension",   get_flat("wrist_extension", 0.1)),
+                ("joint_lift",        get_flat("lift_height", 0.0)),
+                ("wrist_extension",   get_flat("wrist_extension", 0.0)),
                 ("joint_wrist_yaw",   get_rpy("joint_wrist_yaw", 0.0)),
                 ("joint_wrist_pitch", get_rpy("joint_wrist_pitch", 0.0)),
                 ("joint_wrist_roll",  get_rpy("joint_wrist_roll", 0.0)),
             ]
 
-        self.node.get_logger().info(f"Joints list: {joints_list}")
+        self.get_logger().info(f"Joints list: {joints_list}")
         return self.send_base_goal_blocking(joints_list)
 
     def execute_extraction(self):
         # Approach
-        self.node.get_logger().info("Executing navigation (approaching trash can)...")
+        self.get_logger().info("Executing navigation (approaching trash can)...")
         start_poses = self.load_poses(CAN_START_POSE_FILE)
 
         if "trash_start" in start_poses:
             pose = start_poses["trash_start"]
             target_frame = pose.get("frame", "trash_can")
-            offset_z = pose.get("position", {}).get("z", 0.0)
+            offset_z = pose.get("position", {}).get("z")
             if self.align_to_marker(target_frame, offset_z=offset_z, offset_orientation=TRASH_CAN_OFFSET_ORIENTATION):
                 self.execute_named_pose_from_dict(pose)
         
         # Extraction
-        self.node.get_logger().info("Executing extraction (picking up trash)...")
+        self.get_logger().info("Executing extraction (picking up trash)...")
         pickup_poses = self.load_poses(CAN_PICKUP_POSE_FILE)
         # Sequence: before_pickup -> (grip) -> pickup_high -> pickup_retracted
         for pose_name in ["before_pickup", "pickup_high", "pickup_retracted"]:
             if pose_name in pickup_poses:
-                self.node.get_logger().info(f"Executing pose: {pose_name}")
+                self.get_logger().info(f"Executing pose: {pose_name}")
                 self.execute_named_pose_from_dict(pickup_poses[pose_name])
                 time.sleep(5.0)
 
     def execute_disposal(self):
         # Approach
-        self.node.get_logger().info("Executing navigation (approaching receptacle)...")
+        self.get_logger().info("Executing navigation (approaching receptacle)...")
         poses = self.load_poses(RECEPTACLE_START_POSE_FILE)
 
         if "receptacle_start" in poses:
             start_pose = poses["receptacle_start"]
             target_frame = start_pose.get("frame", "receptacle")
+
             offset_z = start_pose.get("position", {}).get("z", 0.0)
             offset_x = start_pose.get("position", {}).get("x", 0.0)
             if self.align_to_marker(target_frame, offset_x=offset_x, offset_z=offset_z, offset_orientation=RECEPTACLE_OFFSET_ORIENTATION):
@@ -248,17 +248,27 @@ class WasteDisposal(Node):
                 time.sleep(2.0)
 
         # disposal is in same JSON as approach
-        self.node.get_logger().info("Executing disposal (dropping into receptacle)...")
+        self.get_logger().info("Executing disposal (dropping into receptacle)...")
 
         if "receptacle_drop" in poses:
             drop_pose = poses["receptacle_drop"]
             self.execute_named_pose_from_dict(drop_pose)
 
+    def execute_sequence(self):
+        self.get_logger().info("Starting automatic sequence: Extraction -> Disposal")
+        self.execute_extraction()
+        self.execute_disposal()
+        self.get_logger().info("Automatic sequence completed.")
+
+    def execute_stop(self):
+        self.get_logger().warn("Stop requested! Halting immediately.")
+        if self.trajectory_client:
+            self.get_logger().info("Attempting to cancel current trajectory...")
+
            
 def main(args=None):
     rclpy.init(args=args)
-    node = Node("waste_disposal")
-    waste_disposal = WasteDisposal(node=node)
+    waste_disposal = WasteDisposal()
     try:
         rclpy.spin(waste_disposal)
     except KeyboardInterrupt:
