@@ -23,7 +23,6 @@ from action_msgs.msg import GoalStatus
 CAN_START_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/aruco_data/trash_start.json" # this is how stretch approaches the can
 CAN_PICKUP_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/joint_state_data/trash_pickup.json" # this is the extraction poses
 RECEPTACLE_START_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/aruco_data/receptacle_start.json" # this is the approach pose for the receptacle
-RECEPTACLE_DROP_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/joint_state_data/receptacle_drop.json" # this is the pose for dropping the bag into it
 
 TRASH_CAN_OFFSET_ORIENTATION = np.pi
 RECEPTACLE_OFFSET_ORIENTATION = np.pi/2
@@ -214,8 +213,8 @@ class WasteDisposal(Node):
     def execute_extraction(self):
         # Approach
         self.node.get_logger().info("Executing navigation (approaching trash can)...")
-        
         start_poses = self.load_poses(CAN_START_POSE_FILE)
+
         if "trash_start" in start_poses:
             pose = start_poses["trash_start"]
             target_frame = pose.get("frame", "trash_can")
@@ -225,7 +224,6 @@ class WasteDisposal(Node):
         
         # Extraction
         self.node.get_logger().info("Executing extraction (picking up trash)...")
-
         pickup_poses = self.load_poses(CAN_PICKUP_POSE_FILE)
         # Sequence: before_pickup -> (grip) -> pickup_high -> pickup_retracted
         for pose_name in ["before_pickup", "pickup_high", "pickup_retracted"]:
@@ -237,30 +235,25 @@ class WasteDisposal(Node):
     def execute_disposal(self):
         # Approach
         self.node.get_logger().info("Executing navigation (approaching receptacle)...")
-        start_poses = self.load_poses(RECEPTACLE_START_POSE_FILE)
+        poses = self.load_poses(RECEPTACLE_START_POSE_FILE)
 
-        if "receptacle_start" in start_poses:
-            pose = start_poses["receptacle_start"]
-            target_frame = pose.get("frame", "receptacle")
-            offset_z = pose.get("position", {}).get("z", 0.0)
-            if self.align_to_marker(target_frame, offset_z=offset_z, offset_orientation=RECEPTACLE_OFFSET_ORIENTATION):
-                self.execute_named_pose_from_dict(pose)
+        if "receptacle_start" in poses:
+            start_pose = poses["receptacle_start"]
+            target_frame = start_pose.get("frame", "receptacle")
+            offset_z = start_pose.get("position", {}).get("z", 0.0)
+            offset_x = start_pose.get("position", {}).get("x", 0.0)
+            offset_y = start_pose.get("position", {}).get("y", 0.0)
+            if self.align_to_marker(target_frame, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z, offset_orientation=RECEPTACLE_OFFSET_ORIENTATION):
+                self.execute_named_pose_from_dict(start_pose)
 
-        # Drop — prefer the pose embedded in receptacle_start.json,
-        # fall back to the standalone receptacle_drop.json if absent
+        # disposal is in same JSON as approach
         self.node.get_logger().info("Executing disposal (dropping into receptacle)...")
-        drop_pose = start_poses.get("receptacle_drop")
 
-        if drop_pose is None:
-            drop_poses = self.load_poses(RECEPTACLE_DROP_POSE_FILE)
-            drop_pose = drop_poses.get("receptacle_drop")
-
-        if drop_pose is not None:
-            self.node.get_logger().info("Dropping trash...")
+        if "receptacle_drop" in poses:
+            drop_pose = poses["receptacle_drop"]
             self.execute_named_pose_from_dict(drop_pose)
-        else:
-            self.node.get_logger().error("No receptacle_drop pose found in either file.")
-        
+
+           
 def main(args=None):
     rclpy.init(args=args)
     node = Node("waste_disposal")
