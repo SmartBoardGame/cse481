@@ -19,3 +19,6 @@ Terminal 7:
 python3 aruco_navigator.py
 
 Terminal 8 (optional): Keyboard teleop
+
+cd /home/hello-robot/kevin/cse481/final_project && python3 ros_action_server.py
+ros2 topic pub --once /task_execution std_msgs/msg/String "data: 'disposal'"

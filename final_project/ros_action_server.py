@@ -242,9 +242,10 @@ class WasteDisposal(Node):
             target_frame = start_pose.get("frame", "receptacle")
             offset_z = start_pose.get("position", {}).get("z", 0.0)
             offset_x = start_pose.get("position", {}).get("x", 0.0)
-            offset_y = start_pose.get("position", {}).get("y", 0.0)
-            if self.align_to_marker(target_frame, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z, offset_orientation=RECEPTACLE_OFFSET_ORIENTATION):
+            if self.align_to_marker(target_frame, offset_x=offset_x, offset_z=offset_z, offset_orientation=RECEPTACLE_OFFSET_ORIENTATION):
                 self.execute_named_pose_from_dict(start_pose)
+                self.send_base_goal_blocking([("position", 0.8)])  # move a little more forward
+                time.sleep(2.0)
 
         # disposal is in same JSON as approach
         self.node.get_logger().info("Executing disposal (dropping into receptacle)...")
