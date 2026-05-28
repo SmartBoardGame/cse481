@@ -22,7 +22,7 @@ from action_msgs.msg import GoalStatus
 
 CAN_START_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/aruco_data/trash_start.json" # this is how stretch approaches the can
 CAN_PICKUP_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/joint_state_data/trash_pickup.json" # this is the extraction poses
-RECEPTACLE_START_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/aruco_data/receptacle_start.json" # this is the approach pose for the receptacle
+RECEPTACLE_START_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/aruco_data/receptacle_start_copy.json" # this is the approach pose for the receptacle
 
 TRASH_CAN_OFFSET_ORIENTATION = np.pi
 RECEPTACLE_OFFSET_ORIENTATION = np.pi/2
@@ -244,7 +244,7 @@ class WasteDisposal(Node):
             offset_x = start_pose.get("position", {}).get("x", 0.0)
             if self.align_to_marker(target_frame, offset_x=offset_x, offset_z=offset_z, offset_orientation=RECEPTACLE_OFFSET_ORIENTATION):
                 self.execute_named_pose_from_dict(start_pose)
-                self.send_base_goal_blocking([("position", 0.8)])  # move a little more forward
+                self.send_base_goal_blocking([("translate_mobile_base", 0.5)])  # move forward
                 time.sleep(2.0)
 
         # disposal is in same JSON as approach
