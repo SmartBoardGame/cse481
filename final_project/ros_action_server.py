@@ -260,6 +260,17 @@ class WasteDisposal(Node):
         self.execute_disposal()
         self.get_logger().info("Automatic sequence completed.")
 
+    def execute_reset(self):
+        self.get_logger().info("Executing reset (returning to neutral pose)...")
+        joints_list = [
+            ("joint_lift",        0.5),
+            ("wrist_extension",   0.0),
+            ("joint_wrist_yaw",   0.0),
+            ("joint_wrist_pitch", 0.0),
+            ("joint_wrist_roll",  0.0),
+        ]
+        self.send_base_goal_blocking(joints_list)
+
     def execute_stop(self):
         self.get_logger().warn("Stop requested! Halting immediately.")
         if self.trajectory_client:
