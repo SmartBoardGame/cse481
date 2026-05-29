@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Automatic Waste Disposal</title>
+  <script src="https://cdn.jsdelivr.net/npm/roslib/build/roslib.min.js"></script>
+  <link rel="stylesheet" href="final_frontend.css">
+</head>
+<body>
+  <div class="container">
+    <h2>Automatic Waste Disposal System</h2>
+
+    <div class="controls">
+      <button class="primary" onclick="executeTask('sequence')">Start Automatic Disposal</button>
+      <button id="stopBtn" class="danger" onclick="estop()">Pause / Emergency Stop</button>
+      <button onclick="executeTask('extraction')">Execute Extraction</button>
+      <button onclick="executeTask('disposal')">Execute Disposal</button>
+      <button class="secondary" onclick="executeTask('reset')">Reset Robot (Stow)</button>
+      <button class="secondary" onclick="executeTask('locate_can')">Locate Garbage Can</button> 
+      <button class="secondary" onclick="executeTask('collect')">[FUTURE] Trash Collection</button>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; border-bottom: 2px solid #3498db; padding-bottom: 5px;">
+      <h3 style="margin: 0;">Live Camera Feed</h3>
+      <div>
+        <span id="status" style="font-family: monospace; margin-left: 5px;">Connecting...</span>
+      </div>
+    </div>
+
+    <div class="camera-feed" id="video">
+      <!-- 
+        If web_video_server is running:
+        <img src="http://slinky.hcrlab.cs.washington.edu:8080/stream?topic=/camera/color/image_raw"> 
+      -->
+      No Camera Feed Detected
+    </div>
+    </div>
+
+    <script>
+    const ros = new ROSLIB.Ros({
+      url: "ws://rocky.hcrlab.cs.washington.edu:9090"
+      //url: "ws://slinky.hcrlab.cs.washington.edu:9090"
+    });
+
+    const taskTopic = new ROSLIB.Topic({
+      ros: ros,
+      name: "/task_execution",
+      messageType: "std_msgs/String"
+    });
+
+    const statusText = document.getElementById("status");
+    const stopBtn = document.getElementById("stopBtn");
+
+    ros.on('connection', () => {
+      statusText.innerText = "Connected to Stretch";
+      statusText.style.color = "#27ae60";
+    });
+
+    ros.on('error', (error) => {
+      statusText.innerText = "Error Connecting to Stretch";
+      statusText.style.color = "#e74c3c";
+    });
+
+    ros.on('close', () => {
+      statusText.innerText = "Connection Closed";
+      statusText.style.color = "#f39c12";
+    });
+
+    function executeTask(taskType) {
+      // Reset stop button appearance
+      stopBtn.innerText = "Pause / Emergency Stop";
+      stopBtn.style.backgroundColor = "#e74c3c";
+
+      const msg = new ROSLIB.Message({
+        data: taskType
+      });
+      taskTopic.publish(msg);
+      statusText.innerText = "Status: Executing " + taskType + "...";
+      console.log("Published task:", taskType);
+    }
+
+    function estop() {
+      // Change button appearance to "Paused"
+      stopBtn.innerText = "PAUSED";
+      stopBtn.style.backgroundColor = "#d35400";
+
+      // Send stop command to task execution
+      const msg = new ROSLIB.Message({
+        data: 'stop'
+      });
+      taskTopic.publish(msg);
+
+      // Also send zero velocity to cmd_vel as an immediate safety measure
+      const cmdVel = new ROSLIB.Topic({
+        ros: ros,
+        name: "/stretch/cmd_vel",
+        messageType: "geometry_msgs/Twist"
+      });
+      const stopMsg = new ROSLIB.Message({
+        linear: { x: 0, y: 0, z: 0 },
+        angular: { x: 0, y: 0, z: 0 }
+      });
+      cmdVel.publish(stopMsg);
+
+      statusText.innerText = "Status: EMERGENCY STOP SENT";
+      statusText.style.color = "#e74c3c";
+    }
+    </script>
+
+</body>
+</html>

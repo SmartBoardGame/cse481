@@ -1,55 +1,290 @@
+import json
 import rclpy
 from rclpy.node import Node
-from rclpy.action import ActionServer, GoalResponse
+from std_msgs.msg import String
+from sensor_msgs.msg import JointState
+
+import tf2_ros
+from tf2_ros import TransformException, Buffer, TransformListener
+from tf_transformations import euler_from_quaternion, quaternion_matrix
+
+import sys
+import time
+from math import atan2, sqrt
+import numpy as np
+from control_msgs.action import FollowJointTrajectory
+from geometry_msgs.msg import TransformStamped
+from rclpy.action import ActionClient
+from rclpy.duration import Duration
+from rclpy.time import Time
+from trajectory_msgs.msg import JointTrajectoryPoint
+from action_msgs.msg import GoalStatus
+
+CAN_START_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/aruco_data/trash_start.json" # this is how stretch approaches the can
+CAN_PICKUP_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/joint_state_data/trash_pickup.json" # this is the extraction poses
+RECEPTACLE_START_POSE_FILE = "/home/hello-robot/kevin/cse481/final_project/aruco_data/receptacle_start_copy.json" # this is the approach pose for the receptacle
+
+TRASH_CAN_OFFSET_ORIENTATION = np.pi
+RECEPTACLE_OFFSET_ORIENTATION = np.pi/2
 
 class WasteDisposal(Node):
     def __init__(self):
         super().__init__('waste_disposal')
 
-        # Action Server
-        self._action_server = ActionServer(
-            self,
-            None, # Placeholder Action Type
-            'task_execution',
-            execute_callback=self.execute_callback,
-            goal_callback=self.goal_callback
-        )
-        self.get_logger().info("Action server started.")
+        # TF and Action Client setup
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
 
-    def goal_callback(self, goal_request):
-        return GoalResponse.ACCEPT
-    
-    def execute_callback(self, goal_handle):
-        """route incoming goals to correct handler"""
-        task_type = goal_handle.request.task_type
-        # navigation, extraction, etc.
+        self.trajectory_client = ActionClient(
+            self,
+            FollowJointTrajectory,
+            "/stretch_controller/follow_joint_trajectory",
+        )
+
+        if not self.trajectory_client.wait_for_server(timeout_sec=10.0):
+            self.get_logger().error("Unable to connect to trajectory server.")
+            
+        # Subscriber
+        self.subscription = self.create_subscription(
+            String,
+            'task_execution',
+            self.task_callback,
+            10
+        )
+        self.get_logger().info("Waste Disposal node started and listening to /task_execution.")
+
+    def task_callback(self, msg):
+        task_type = msg.data.strip().lower()
+        self.get_logger().info(f"Received task: {task_type}")
+        
         handler = getattr(self, f"execute_{task_type}", None)
         
         if not handler:
             self.get_logger().error(f"Unknown task type: {task_type}")
-            goal_handle.abort()
-            return None
+            return
         
-        handler(goal_handle)
-        return None # should return result
-    
-    def execute_navigation(self, goal_handle):
-        self.get_logger().info("Executing navigation task ...")
+        handler()
 
+    def load_poses(self, file_path):
+        try:
+            with open(file_path, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            self.get_logger().error(f"Could not load poses from {file_path}: {e}")
+            return {}
 
-        goal_handle.succeed()
-        return None
+    def send_base_goal_blocking(self, joints_list):
+        point = JointTrajectoryPoint()
+        point.positions = [float(inc) for _, inc in joints_list]
+        point.time_from_start = Duration(seconds=5.0).to_msg()
 
-    def execute_extraction(self, goal_handle):
-        self.get_logger().info("Executing extraction task...")
+        goal = FollowJointTrajectory.Goal()
+        goal.trajectory.joint_names = [joint_name for joint_name, _ in joints_list]
+        goal.trajectory.points = [point]
 
+        joint_names_str = ", ".join(goal.trajectory.joint_names)
+        self.get_logger().info(f"Sending goal for joints: [{joint_names_str}]")
 
-        goal_handle.succeed()
-        return None
+        send_goal_future = self.trajectory_client.send_goal_async(goal)
+        rclpy.spin_until_future_complete(self, send_goal_future)
+        goal_handle = send_goal_future.result()
 
+        if not goal_handle.accepted:
+            self.get_logger().error(f"Goal for joints [{joint_names_str}] was rejected!")
+            return False
+
+        result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(self, result_future)
+        result = result_future.result()
+
+        if result.status != GoalStatus.STATUS_SUCCEEDED:
+            self.get_logger().warn(f"Goal for joints [{joint_names_str}] did not succeed: status {result.status}")
+            return False
+        
+        self.get_logger().info(f"Goal for joints [{joint_names_str}] succeeded.")
+        return True
+
+    def compute_difference(self, target_frame, offset_x=0, offset_y=0, offset_z=0, offset_orientation=0):
+        try:
+            self.get_logger().info(f"aligning to offsets offset_x {offset_x}, offset_y {offset_y}, offset_z {offset_z}")
+
+            # Extract quaternion and rotation matrix of marker in base_link frame
+            trans_base = self.tf_buffer.lookup_transform(
+                    "base_link", target_frame, Time()
+                    )
+            x, y, z, w = (
+                trans_base.transform.rotation.x,
+                trans_base.transform.rotation.y,
+                trans_base.transform.rotation.z,
+                trans_base.transform.rotation.w,
+            )
+            R = quaternion_matrix((x, y, z, w))
+
+            # Apply rotation to the offset vector, positive Z DIRECTION IN OUR CASE
+            P_dash = np.array([[offset_x], [offset_y], [offset_z], [1]])
+            P = np.array(
+                [
+                    [trans_base.transform.translation.x],
+                    [trans_base.transform.translation.y],
+                    [0],
+                    [1],
+                ]
+            )
+            X = np.matmul(R, P_dash)
+
+            # Compute the marker position with offset in base_link frame
+            P_base = X + P
+            P_base[3, 0] = 1  # Homogeneous coordinate
+
+            # Extract adjusted position
+            base_position_x = P_base[0, 0]
+            base_position_y = P_base[1, 0]
+
+            # Compute rotation and translation needed
+            phi = atan2(base_position_y, base_position_x)
+            dist = sqrt(base_position_x**2 + base_position_y**2)
+
+            _, _, z_rot_base = euler_from_quaternion([x, y, z, w])
+            # Calculate final rotation: -phi (cancel rotation needed to align),
+            # + z_rot_base (original marker rotation),
+            # + pi (such that the base and the marker axis are aligned as shown in tutorial)
+            
+            # offset_orientation: np.pi for trash can start, np.pi/2 for receptacle
+            z_rot_base = -phi + z_rot_base + offset_orientation
+
+            return phi, dist, z_rot_base
+        except TransformException as e:
+            self.get_logger().error(f"Transform error: {e}")
+            return None, None, None
+
+    def align_to_marker(self, target_frame, offset_x=0, offset_y=0, offset_z=0, offset_orientation=0):
+        self.get_logger().info(f"Aligning to {target_frame} with offset z={offset_z}")
+        phi, dist, final_theta = self.compute_difference(target_frame, offset_x, offset_y, offset_z, offset_orientation)
+        
+        if phi is None:
+            return False
+
+        self.send_base_goal_blocking([("rotate_mobile_base", phi)])
+        self.send_base_goal_blocking([("translate_mobile_base", dist)])
+        self.send_base_goal_blocking([("rotate_mobile_base", final_theta)])
+        return True
+
+    def execute_named_pose_from_dict(self, pose_data):
+        if "joints" in pose_data:
+            joints = pose_data["joints"]
+
+            def get_joint(key, default):
+                if key not in joints:
+                    self.get_logger().warn(f"Joint '{key}' not found in joints dict, using default: {default}")
+                return joints.get(key, default)
+
+            joints_list = [
+                ("joint_lift",        get_joint("joint_lift", 0.0)),
+                ("wrist_extension",   get_joint("joint_arm_total", 0.0)),
+                ("joint_wrist_yaw",   get_joint("joint_wrist_yaw", 0.0)),
+                ("joint_wrist_pitch", get_joint("joint_wrist_pitch", 0.0)),
+                ("joint_wrist_roll",  get_joint("joint_wrist_roll", 0.0)),
+            ]
+        else:
+            gripper_rpy = pose_data.get("gripper_rpy", {})
+
+            def get_flat(key, default):
+                if key not in pose_data:
+                    self.get_logger().warn(f"Key '{key}' not found in pose_data, using default: {default}")
+                return pose_data.get(key, default)
+
+            def get_rpy(key, default):
+                if key not in gripper_rpy:
+                    self.get_logger().warn(f"Key '{key}' not found in gripper_rpy, using default: {default}")
+                return gripper_rpy.get(key, default)
+
+            joints_list = [
+                ("joint_lift",        get_flat("lift_height", 0.0)),
+                ("wrist_extension",   get_flat("wrist_extension", 0.0)),
+                ("joint_wrist_yaw",   get_rpy("joint_wrist_yaw", 0.0)),
+                ("joint_wrist_pitch", get_rpy("joint_wrist_pitch", 0.0)),
+                ("joint_wrist_roll",  get_rpy("joint_wrist_roll", 0.0)),
+            ]
+
+        self.get_logger().info(f"Joints list: {joints_list}")
+        return self.send_base_goal_blocking(joints_list)
+
+    def execute_extraction(self):
+        # Approach
+        self.get_logger().info("Executing navigation (approaching trash can)...")
+        start_poses = self.load_poses(CAN_START_POSE_FILE)
+
+        if "trash_start" in start_poses:
+            pose = start_poses["trash_start"]
+            target_frame = pose.get("frame", "trash_can")
+            offset_z = pose.get("position", {}).get("z")
+            if self.align_to_marker(target_frame, offset_z=offset_z, offset_orientation=TRASH_CAN_OFFSET_ORIENTATION):
+                self.execute_named_pose_from_dict(pose)
+        
+        # Extraction
+        self.get_logger().info("Executing extraction (picking up trash)...")
+        pickup_poses = self.load_poses(CAN_PICKUP_POSE_FILE)
+        # Sequence: before_pickup -> (grip) -> pickup_high -> pickup_retracted
+        for pose_name in ["before_pickup", "pickup_high", "pickup_retracted"]:
+            if pose_name in pickup_poses:
+                self.get_logger().info(f"Executing pose: {pose_name}")
+                self.execute_named_pose_from_dict(pickup_poses[pose_name])
+                time.sleep(5.0)
+
+    def execute_disposal(self):
+        # Approach
+        self.get_logger().info("Executing navigation (approaching receptacle)...")
+        poses = self.load_poses(RECEPTACLE_START_POSE_FILE)
+
+        if "receptacle_start" in poses:
+            start_pose = poses["receptacle_start"]
+            target_frame = start_pose.get("frame", "receptacle")
+
+            offset_z = start_pose.get("position", {}).get("z", 0.0)
+            offset_x = start_pose.get("position", {}).get("x", 0.0)
+            if self.align_to_marker(target_frame, offset_x=offset_x, offset_z=offset_z, offset_orientation=RECEPTACLE_OFFSET_ORIENTATION):
+                self.execute_named_pose_from_dict(start_pose)
+                self.send_base_goal_blocking([("translate_mobile_base", 0.5)])  # move forward
+                time.sleep(2.0)
+
+        # disposal is in same JSON as approach
+        self.get_logger().info("Executing disposal (dropping into receptacle)...")
+
+        if "receptacle_drop" in poses:
+            drop_pose = poses["receptacle_drop"]
+            self.execute_named_pose_from_dict(drop_pose)
+
+    def execute_sequence(self):
+        self.get_logger().info("Starting automatic sequence: Extraction -> Disposal")
+        self.execute_extraction()
+        self.execute_disposal()
+        self.get_logger().info("Automatic sequence completed.")
+
+    def execute_reset(self):
+        self.get_logger().info("Executing reset (returning to neutral pose)...")
+        joints_list = [
+            ("joint_lift",        0.5),
+            ("wrist_extension",   0.0),
+            ("joint_wrist_yaw",   0.0),
+            ("joint_wrist_pitch", 0.0),
+            ("joint_wrist_roll",  0.0),
+        ]
+        self.send_base_goal_blocking(joints_list)
+
+    def execute_stop(self):
+        self.get_logger().warn("Stop requested! Halting immediately.")
+        if self.trajectory_client:
+            self.get_logger().info("Attempting to cancel current trajectory...")
+
+           
 def main(args=None):
     rclpy.init(args=args)
-    rclpy.spin(WasteDisposal())
+    waste_disposal = WasteDisposal()
+    try:
+        rclpy.spin(waste_disposal)
+    except KeyboardInterrupt:
+        pass
+    waste_disposal.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':
