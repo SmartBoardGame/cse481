@@ -7,8 +7,11 @@ if [ "$1" == "slinky" ]; then
 elif [ "$1" == "weird-stretch" ]; then
     WEB_DIR="$HOME/bresenham/cse481/final_project"
     TARGET_URL="http://weird-stretch.cs.washington.edu:8000"
+elif [ "$1" == "rocky" ]; then
+    WEB_DIR="$HOME/kevin/cse481/final_project"
+    TARGET_URL="http://rocky.hcrlab.cs.washington.edu:8000"
 else
-    echo "Usage: $0 [slinky|weird-stretch]"
+    echo "Usage: $0 [slinky|weird-stretch|rocky]"
     exit 1
 fi
 
