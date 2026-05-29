@@ -164,9 +164,9 @@ class WasteDisposal(Node):
         if phi is None:
             return False
 
-        self.send_base_goal_blocking([("rotate_mobile_base", phi)])
-        self.send_base_goal_blocking([("translate_mobile_base", dist)])
-        self.send_base_goal_blocking([("rotate_mobile_base", final_theta)])
+        self.send_base_goal_blocking([("translate_mobile_base", 0.0), ("rotate_mobile_base", phi)])
+        self.send_base_goal_blocking([("translate_mobile_base", dist), ("rotate_mobile_base", 0.0)])
+        self.send_base_goal_blocking([("translate_mobile_base", 0.0), ("rotate_mobile_base", final_theta)])
         return True
 
     def execute_named_pose_from_dict(self, pose_data):
@@ -178,13 +178,11 @@ class WasteDisposal(Node):
                     self.get_logger().warn(f"Joint '{key}' not found in joints dict, using default: {default}")
                 return joints.get(key, default)
 
-            joints_list = [
-                ("joint_lift",        get_joint("joint_lift", 0.0)),
-                ("wrist_extension",   get_joint("joint_arm_total", 0.0)),
-                ("joint_wrist_yaw",   get_joint("joint_wrist_yaw", 0.0)),
-                ("joint_wrist_pitch", get_joint("joint_wrist_pitch", 0.0)),
-                ("joint_wrist_roll",  get_joint("joint_wrist_roll", 0.0)),
-            ]
+            lift_val = get_joint("joint_lift", 0.0)
+            arm_total = get_joint("joint_arm_total", 0.0)
+            yaw_val = get_joint("joint_wrist_yaw", 0.0)
+            pitch_val = get_joint("joint_wrist_pitch", 0.0)
+            roll_val = get_joint("joint_wrist_roll", 0.0)
         else:
             gripper_rpy = pose_data.get("gripper_rpy", {})
 
@@ -198,13 +196,23 @@ class WasteDisposal(Node):
                     self.get_logger().warn(f"Key '{key}' not found in gripper_rpy, using default: {default}")
                 return gripper_rpy.get(key, default)
 
-            joints_list = [
-                ("joint_lift",        get_flat("lift_height", 0.0)),
-                ("wrist_extension",   get_flat("wrist_extension", 0.0)),
-                ("joint_wrist_yaw",   get_rpy("joint_wrist_yaw", 0.0)),
-                ("joint_wrist_pitch", get_rpy("joint_wrist_pitch", 0.0)),
-                ("joint_wrist_roll",  get_rpy("joint_wrist_roll", 0.0)),
-            ]
+            lift_val = get_flat("lift_height", 0.0)
+            arm_total = get_flat("wrist_extension", 0.0)
+            yaw_val = get_rpy("joint_wrist_yaw", 0.0)
+            pitch_val = get_rpy("joint_wrist_pitch", 0.0)
+            roll_val = get_rpy("joint_wrist_roll", 0.0)
+
+        arm_segment = arm_total / 4.0
+        joints_list = [
+            ("joint_lift",        lift_val),
+            ("joint_arm_l0",      arm_segment),
+            ("joint_arm_l1",      arm_segment),
+            ("joint_arm_l2",      arm_segment),
+            ("joint_arm_l3",      arm_segment),
+            ("joint_wrist_yaw",   yaw_val),
+            ("joint_wrist_pitch", pitch_val),
+            ("joint_wrist_roll",  roll_val),
+        ]
 
         self.get_logger().info(f"Joints list: {joints_list}")
         return self.send_base_goal_blocking(joints_list)
@@ -244,7 +252,7 @@ class WasteDisposal(Node):
             offset_x = start_pose.get("position", {}).get("x", 0.0)
             if self.align_to_marker(target_frame, offset_x=offset_x, offset_z=offset_z, offset_orientation=RECEPTACLE_OFFSET_ORIENTATION):
                 self.execute_named_pose_from_dict(start_pose)
-                self.send_base_goal_blocking([("translate_mobile_base", 0.5)])  # move forward
+                self.send_base_goal_blocking([("translate_mobile_base", 0.5), ("rotate_mobile_base", 0.0)])  # move forward
                 time.sleep(2.0)
 
         # disposal is in same JSON as approach
@@ -264,17 +272,20 @@ class WasteDisposal(Node):
         self.get_logger().info("Executing reset (returning to neutral pose)...")
         joints_list = [
             ("joint_lift",        0.5),
-            ("wrist_extension",   0.0),
+            ("joint_arm_l0",      0.0),
+            ("joint_arm_l1",      0.0),
+            ("joint_arm_l2",      0.0),
+            ("joint_arm_l3",      0.0),
             ("joint_wrist_yaw",   0.0),
             ("joint_wrist_pitch", 0.0),
             ("joint_wrist_roll",  0.0),
         ]
         self.send_base_goal_blocking(joints_list)
 
-    def execute_stop(self):
-        self.get_logger().warn("Stop requested! Halting immediately.")
-        if self.trajectory_client:
-            self.get_logger().info("Attempting to cancel current trajectory...")
+    # def execute_stop(self):
+    #     self.get_logger().warn("Stop requested! Halting immediately.")
+    #     if self.trajectory_client:
+    #         self.get_logger().info("Attempting to cancel current trajectory...")
 
            
 def main(args=None):
