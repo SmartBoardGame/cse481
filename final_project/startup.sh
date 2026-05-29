@@ -50,9 +50,6 @@ tmux send-keys -t "$SESSION:rosbridge" "ros2 launch rosbridge_server rosbridge_w
 tmux new-window -t "$SESSION" -n 'webserver'
 tmux send-keys -t "$SESSION:webserver" "cd ${WEB_DIR} && python3 -m http.server 8000" C-m
 
-# Opens browser
-xdg-open "$TARGET_URL"
-
 # Terminal 7: action_server
 tmux new-window -t "$SESSION" -n 'action_server'
 tmux send-keys -t "$SESSION:action_server" "cd ${WEB_DIR} && python3 ros_action_server.py" C-m
