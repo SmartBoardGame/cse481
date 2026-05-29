@@ -164,9 +164,10 @@ class WasteDisposal(Node):
         if phi is None:
             return False
 
-        self.send_base_goal_blocking([("translate_mobile_base", 0.0), ("rotate_mobile_base", phi)])
-        self.send_base_goal_blocking([("translate_mobile_base", dist), ("rotate_mobile_base", 0.0)])
-        self.send_base_goal_blocking([("translate_mobile_base", 0.0), ("rotate_mobile_base", final_theta)])
+        # Split base goals because they are mutually exclusive in the hardware controller
+        self.send_base_goal_blocking([("rotate_mobile_base", phi)])
+        self.send_base_goal_blocking([("translate_mobile_base", dist)])
+        self.send_base_goal_blocking([("rotate_mobile_base", final_theta)])
         return True
 
     def execute_named_pose_from_dict(self, pose_data):
@@ -252,7 +253,7 @@ class WasteDisposal(Node):
             offset_x = start_pose.get("position", {}).get("x", 0.0)
             if self.align_to_marker(target_frame, offset_x=offset_x, offset_z=offset_z, offset_orientation=RECEPTACLE_OFFSET_ORIENTATION):
                 self.execute_named_pose_from_dict(start_pose)
-                self.send_base_goal_blocking([("translate_mobile_base", 0.5), ("rotate_mobile_base", 0.0)])  # move forward
+                self.send_base_goal_blocking([("translate_mobile_base", 0.5)])  # move forward
                 time.sleep(2.0)
 
         # disposal is in same JSON as approach
