@@ -2,7 +2,7 @@
   "receptacle_start": {
     "frame": "receptacle",
     "position": {
-      "x": -0.5440935291934906,
+      "x": -0.6440935291934906,
       "y": -0.46971681621178407,
       "z": 0.6909102474383234
     },
@@ -29,7 +29,7 @@
       "joint_arm_l2": 0.07998252101556011,
       "joint_arm_l3": 0.07998252101556011,
       "joint_wrist_yaw": 1.5953400194010667,
-      "joint_wrist_pitch": -0.4,
+      "joint_wrist_pitch": -1.4,
       "joint_wrist_roll": 0.0,
       "joint_gripper_finger_left": 0.06362513567124516,
       "joint_arm_total": 0.31993008406224044
