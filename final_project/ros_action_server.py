@@ -10,6 +10,7 @@ from tf_transformations import euler_from_quaternion, quaternion_matrix
 
 import sys
 import time
+import threading  # <-- Added to handle blocking action calls safely
 from math import atan2, sqrt
 import numpy as np
 from control_msgs.action import FollowJointTrajectory
@@ -63,7 +64,8 @@ class WasteDisposal(Node):
             self.get_logger().error(f"Unknown task type: {task_type}")
             return
         
-        handler()
+        # Run execution in a separate background thread so rclpy.spin() doesn't deadlock
+        threading.Thread(target=handler, daemon=True).start()
 
     def load_poses(self, file_path):
         try:
@@ -86,7 +88,11 @@ class WasteDisposal(Node):
         self.get_logger().info(f"Sending goal for joints: [{joint_names_str}]")
 
         send_goal_future = self.trajectory_client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self, send_goal_future)
+        
+        # Use a passive sleep loop instead of spin_until_future_complete to avoid deadlock
+        while not send_goal_future.done():
+            time.sleep(0.1)
+            
         goal_handle = send_goal_future.result()
 
         if not goal_handle.accepted:
@@ -94,7 +100,9 @@ class WasteDisposal(Node):
             return False
 
         result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future)
+        while not result_future.done():
+            time.sleep(0.1)
+            
         result = result_future.result()
 
         if result.status != GoalStatus.STATUS_SUCCEEDED:
