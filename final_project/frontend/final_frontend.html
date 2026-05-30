@@ -11,7 +11,7 @@
 
     <div class="controls">
       <button class="primary" onclick="executeTask('sequence')">Start Automatic Disposal</button>
-      <button id="stopBtn" class="danger" onclick="estop()">Pause / Emergency Stop</button>
+      <!-- <button id="stopBtn" class="danger" onclick="estop()">Pause / Emergency Stop</button> -->
       <button onclick="executeTask('extraction')">Execute Extraction</button>
       <button onclick="executeTask('disposal')">Execute Disposal</button>
       <button class="secondary" onclick="executeTask('reset')">Reset Robot (Stow)</button>
@@ -48,7 +48,7 @@
     });
 
     const statusText = document.getElementById("status");
-    const stopBtn = document.getElementById("stopBtn");
+    // const stopBtn = document.getElementById("stopBtn");
 
     ros.on('connection', () => {
       statusText.innerText = "Connected to Stretch";
@@ -67,8 +67,12 @@
 
     function executeTask(taskType) {
       // Reset stop button appearance
-      stopBtn.innerText = "Pause / Emergency Stop";
-      stopBtn.style.backgroundColor = "#e74c3c";
+      /*
+      if (typeof stopBtn !== 'undefined' && stopBtn) {
+        stopBtn.innerText = "Pause / Emergency Stop";
+        stopBtn.style.backgroundColor = "#e74c3c";
+      }
+      */
 
       const msg = new ROSLIB.Message({
         data: taskType
@@ -78,10 +82,13 @@
       console.log("Published task:", taskType);
     }
 
+    /*
     function estop() {
       // Change button appearance to "Paused"
-      stopBtn.innerText = "PAUSED";
-      stopBtn.style.backgroundColor = "#d35400";
+      if (typeof stopBtn !== 'undefined' && stopBtn) {
+        stopBtn.innerText = "PAUSED";
+        stopBtn.style.backgroundColor = "#d35400";
+      }
 
       // Send stop command to task execution
       const msg = new ROSLIB.Message({
@@ -104,6 +111,7 @@
       statusText.innerText = "Status: EMERGENCY STOP SENT";
       statusText.style.color = "#e74c3c";
     }
+    */
     </script>
 
 </body>
